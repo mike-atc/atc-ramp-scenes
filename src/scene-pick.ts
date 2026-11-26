@@ -437,7 +437,7 @@ function MODIFIER_OK(r: OptionRow, scene: SceneRow, severity: Severity): boolean
     case "Age and finish":
     case "Materials and palette":
     case "Natural light":
-      return severity !== "high" || r.category !== "Age and finish" || !/renovation|makeshift/i.test(r.value);
+      return r.category !== "Age and finish" || /^(Brand new|Modern|Slightly worn)/i.test(r.value);
     case "Signage script":
       return r.value === "No readable signs";
     case "Condition":
@@ -504,10 +504,25 @@ export async function buildParts(db: SceneDb, input: BuildInput, rnd: () => numb
       ).results ?? [])
     : [];
   const mood = input.mood.trim();
-  const moodOk = setups.filter((s) => {
+  const sceneShots = [scene.shot_type, scene.shot_type_alt ?? ""].map((x) => x.toLowerCase());
+  const aerialShot = sceneShots.some((x) => x === "aerial" || x === "exterior");
+  const sceneTagList = sceneTags(scene.tags);
+  const compatible = (s: Record<string, string>) => {
+    const id = Number(s.id);
+    if ((id === 12 || id === 4) && !aerialShot) return false; // satellite and drone need an aerial or exterior scene
+    if (id === 12 && scene.subject === "People action") return false;
+    if (id === 7 && !sceneTagList.includes("cctv")) return false;
+    if ((id === 9) && !sceneTagList.includes("dash") && !sceneTagList.includes("road")) return false;
+    return true;
+  };
+  const moodOk = setups.filter((s) => compatible(s)).filter((s) => {
     const allowed = parseList(s.allowed_moods, /;/).map((m) => m.toLowerCase());
     return !allowed.length || allowed[0] === "all" || allowed.includes(mood.toLowerCase());
   });
+  if (!moodOk.length) {
+    const std = await db.prepare("SELECT * FROM setup_types WHERE id = 1").bind().first<Record<string, string>>();
+    if (std) moodOk.push(std);
+  }
   if (!moodOk.length) {
     return {
       error: `No setup fits scene ${scene.id} with severity ${input.severity} and mood ${mood}. Pick another scene or mood.`,
@@ -549,7 +564,9 @@ export async function buildParts(db: SceneDb, input: BuildInput, rnd: () => numb
         .bind(scene.place_type)
         .all<Record<string, string | number>>()
     ).results ?? [];
-  let place = placeRows[0] ?? null;
+  const regionRows = placeRows.filter((r) => regionMatches(String(r.region ?? "Any"), input.region));
+  const placePool = (regionRows.length ? regionRows : placeRows) as (Record<string, string | number> & { weight?: number })[];
+  let place = weightedPick(placePool, rnd) ?? null;
   let placeNote = "";
   if (input.place_name && place) {
     const real = (
