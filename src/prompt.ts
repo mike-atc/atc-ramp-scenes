@@ -23,7 +23,7 @@ export interface StoryInput {
 const MOODS = ["calm", "neutral", "hopeful", "celebratory", "curious", "tense", "urgent", "chaotic", "somber"];
 const SEVS: Severity[] = ["low", "medium", "high"];
 
-async function llm(env: PromptEnv, model: string, system: string, user: string, maxTokens = 900): Promise<Record<string, unknown>> {
+async function llm(env: PromptEnv, model: string, system: string, user: string, maxTokens = 900, effort = "none"): Promise<Record<string, unknown>> {
   if (!env.OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY is not set.");
   let lastRaw = "";
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -34,7 +34,7 @@ async function llm(env: PromptEnv, model: string, system: string, user: string, 
         model,
         max_tokens: maxTokens,
         temperature: 0.4,
-        reasoning: { effort: "none" },
+        reasoning: { effort },
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: system },
@@ -104,7 +104,7 @@ Pick the scene that best fits the story. REJECT any scene whose picture would im
   const user = `${storyText(story)}\n\nCANDIDATE SCENES:\n${scenes
     .map((s) => `#${s.id} ${s.name}\n  ${s.description}\n  people: ${s.people}\n  must not imply: ${s.must_not_imply}`)
     .join("\n")}`;
-  const out = await llm(env, env.PICK_MODEL ?? "anthropic/claude-sonnet-5.5", system, user, 300);
+  const out = await llm(env, env.PICK_MODEL ?? "anthropic/claude-sonnet-5.5", system, user, 2500, "low");
   const id = Number(out.scene_id);
   return { id: scenes.some((s) => s.id === id) ? id : null, reason: String(out.reason ?? "") };
 }
