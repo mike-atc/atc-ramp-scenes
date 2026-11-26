@@ -427,17 +427,18 @@ async function pickCast(db: SceneDb, scene: SceneRow, input: BuildInput, weather
   return { cast, ids, note };
 }
 
-const SAFE_CONDITIONS = new Set(["Pristine and spotless", "Everyday wear", "Cluttered with carts and bags"]);
+const SAFE_CONDITIONS = new Set(["Pristine and spotless", "Cluttered with carts and bags"]);
 const BAD_VEHICLES = new Set(["Fire truck", "Ambulance", "Snow plough", "Seaplane", "Longtail or speedboat"]);
 /** Only modifiers that cannot imply facts the story did not state. */
 function MODIFIER_OK(r: OptionRow, scene: SceneRow, severity: Severity): boolean {
   const t = sceneTags(scene.tags);
   switch (r.category) {
     case "Ads and screens":
+      return !/paper notices|large video wall|generic unbranded ads|tourism posters/i.test(r.value);
     case "Age and finish":
     case "Materials and palette":
     case "Natural light":
-      return r.category !== "Age and finish" || /^(Brand new|Modern|Slightly worn)/i.test(r.value);
+      return r.category !== "Age and finish" || /^(Brand new|Modern)/i.test(r.value);
     case "Signage script":
       return r.value === "No readable signs";
     case "Condition":
