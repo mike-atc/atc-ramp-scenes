@@ -224,6 +224,7 @@ export interface BuildInput {
   place_name?: string; // a real place named in the story
   post_date?: string; // ISO date
   dry_run?: boolean; // true = do not write the posts row
+  scene_severity?: Severity; // severity used to check the scene range when the library has no scene for the story severity
 }
 
 const POSITIVE_MOODS = new Set(["calm", "neutral", "hopeful", "celebratory", "curious"]);
@@ -498,7 +499,7 @@ function regionMatches(rowRegion: string, region: string | undefined): boolean {
 export async function buildParts(db: SceneDb, input: BuildInput, rnd: () => number = Math.random) {
   const scene = await db.prepare("SELECT * FROM scenes WHERE id = ? AND active = 1").bind(input.scene_id).first<SceneRow>();
   if (!scene) return { error: "Scene not found.", status: 404 as const };
-  if (!severityAllowed(scene.severity, input.severity)) {
+  if (!severityAllowed(scene.severity, input.scene_severity ?? input.severity)) {
     return { error: `Scene ${scene.id} does not allow severity ${input.severity}.`, status: 400 as const };
   }
 

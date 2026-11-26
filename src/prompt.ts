@@ -163,6 +163,24 @@ export async function runPrompt(env: PromptEnv, story: StoryInput) {
     cand = await candidateScenes(db, { topic_id: 125, severity: lab.severity, limit: 12 });
     usedTopic = 125;
   }
+  // Library has no scene for this severity: use calmer scenes of the topic, then the general label.
+  // The story severity stays (faces hidden for high); only the scene range check is relaxed.
+  let sceneSeverity = lab.severity as "low" | "medium" | "high";
+  if (cand.count === 0) {
+    const lower = lab.severity === "high" ? (["medium", "low"] as const) : lab.severity === "medium" ? (["low"] as const) : ([] as const);
+    for (const sev of lower) {
+      for (const tid of [lab.topic_id, 125]) {
+        const c = await candidateScenes(db, { topic_id: tid, severity: sev, limit: 12, airline: story.airline, aircraft: story.aircraft });
+        if (c.count > 0) {
+          cand = c;
+          usedTopic = tid;
+          sceneSeverity = sev;
+          break;
+        }
+      }
+      if (cand.count > 0) break;
+    }
+  }
   if (cand.count === 0) throw new Error(`No scenes for topic ${lab.topic_id} at severity ${lab.severity}.`);
 
   // C. AI pick
@@ -181,6 +199,7 @@ export async function runPrompt(env: PromptEnv, story: StoryInput) {
     scene_id: pick.id!,
     topic_id: usedTopic,
     severity: lab.severity,
+    scene_severity: sceneSeverity,
     mood,
     news_id: story.news_id,
     headline: story.title,
@@ -196,6 +215,7 @@ export async function runPrompt(env: PromptEnv, story: StoryInput) {
       scene_id: pick.id!,
       topic_id: usedTopic,
       severity: lab.severity,
+      scene_severity: sceneSeverity,
       mood: "Neutral",
       news_id: story.news_id,
       headline: story.title,
