@@ -1,0 +1,8 @@
+{
+  "name": "ramp-scenes",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-08",
+  "d1_databases": [
+    { "binding": "SCENES", "database_name": "ramp-db", "database_id": "f3635d12-e2cc-4c81-a747-7bf3b82e7548" }
+  ]
+}
