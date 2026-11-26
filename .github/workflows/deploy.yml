@@ -17,5 +17,7 @@ jobs:
           command: deploy
           secrets: |
             RAMP_SCENES_KEY
+            OPENROUTER_API_KEY
         env:
           RAMP_SCENES_KEY: ${{ secrets.RAMP_SCENES_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}

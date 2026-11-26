@@ -1,9 +1,13 @@
+import { runPrompt } from "./prompt";
 import { buildParts, candidateScenes, type SceneDb, type Severity } from "./scene-pick";
 
 interface Env {
   SCENES: D1Database;
   /** secret: wrangler secret put RAMP_SCENES_KEY */
   RAMP_SCENES_KEY: string;
+  OPENROUTER_API_KEY?: string;
+  LABEL_MODEL?: string;
+  WRITE_MODEL?: string;
 }
 
 const j = (data: unknown, status = 200) =>
@@ -21,7 +25,7 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/health") return j({ ok: true });
-    if (url.pathname !== "/pick" || request.method !== "POST") return bad("Not found.", 404);
+    if (!["/pick", "/prompt"].includes(url.pathname) || request.method !== "POST") return bad("Not found.", 404);
     if (!env.RAMP_SCENES_KEY || request.headers.get("authorization") !== `Bearer ${env.RAMP_SCENES_KEY}`) {
       return bad("Unauthorized.", 401);
     }
@@ -30,6 +34,26 @@ export default {
       body = (await request.json()) as Record<string, unknown>;
     } catch {
       return bad("Body must be JSON.");
+    }
+    if (url.pathname === "/prompt") {
+      const title = str(body.title, 400);
+      if (!title) return bad("title is required.");
+      try {
+        return j(
+          await runPrompt(env, {
+            news_id: str(body.news_id, 80) || undefined,
+            title,
+            caption: str(body.caption, 2000),
+            summary: str(body.summary, 3000),
+            airline: str(body.airline, 80) || undefined,
+            aircraft: str(body.aircraft, 80) || undefined,
+            region: str(body.region, 20) || undefined,
+            dry_run: body.dry_run === true,
+          }),
+        );
+      } catch (e) {
+        return bad(e instanceof Error ? e.message : "Prompt job failed.", 500);
+      }
     }
     const severity = str(body.severity, 10).toLowerCase();
     if (!["low", "medium", "high"].includes(severity)) return bad("severity must be low, medium or high.");
