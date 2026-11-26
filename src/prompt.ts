@@ -142,7 +142,8 @@ Rules: describe only what a camera would see. Use the scene description as the b
     .filter(Boolean)
     .join(" ");
   text = `${text} ${tail}`;
-  return text;
+  // safe to paste inside a JSON string in Make: no quotes, backslashes or line breaks
+  return text.replace(/["\\]/g, "").replace(/\s+/g, " ").trim();
 }
 
 export async function runPrompt(env: PromptEnv, story: StoryInput) {
