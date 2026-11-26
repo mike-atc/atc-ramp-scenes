@@ -322,7 +322,19 @@ export function optionAllowed(
   const placeTags = tags.filter((t) => CAST_PLACE_CONTEXT.includes(t));
   if (placeTags.length && ctx.contexts.length && !placeTags.some((t) => ctx.contexts.includes(t))) return false;
   if (tags.includes("rain") && !/rain|storm|wet/i.test(ctx.weather)) return false;
+  if (tags.includes("cold") && !/cold|snow|winter|freez/i.test(ctx.weather)) return false;
+  if (tags.includes("ref")) return false; // needs airline reference images (not available yet)
   return true;
+}
+
+/** Score a staff/group option against the scene text; best match wins. */
+function groupScore(value: string, sceneText: string): number {
+  const tokens = value
+    .toLowerCase()
+    .replace(/\(.*?\)/g, "")
+    .split(/[^a-z]+/)
+    .filter((t) => t.length >= 4 && !["with", "staff", "crew"].includes(t));
+  return tokens.filter((t) => sceneText.includes(t.replace(/s$/, ""))).length;
 }
 
 async function pickCast(db: SceneDb, scene: SceneRow, input: BuildInput, weather: string, recent: Set<string>, rnd: () => number) {
@@ -348,7 +360,6 @@ async function pickCast(db: SceneDb, scene: SceneRow, input: BuildInput, weather
         "Clothing color",
         "Accessory",
         "Expression",
-        "Pose or action",
         ...(crowd ? ["Crowd density", "Group size"] : []),
         "Face visibility",
       ];
@@ -372,7 +383,15 @@ async function pickCast(db: SceneDb, scene: SceneRow, input: BuildInput, weather
     );
     // Facial hair only sometimes; hands-only and high severity never need faces.
     if (category === "Facial hair" && rnd() < 0.7) continue;
-    const pick = weightedPick(options, rnd);
+    let pool = options;
+    if (category.startsWith("Group type")) {
+      const text = `${scene.name} ${scene.people} ${scene.description}`.toLowerCase();
+      const scored = options.map((o) => ({ o, sc: groupScore(o.value, text) }));
+      const best = Math.max(0, ...scored.map((x) => x.sc));
+      if (best === 0) continue; // nothing in the scene names this group: leave it to the scene text
+      pool = scored.filter((x) => x.sc === best).map((x) => x.o);
+    }
+    const pick = weightedPick(pool, rnd);
     if (pick) {
       cast[category] = pick.value;
       ids.push(pick.id);
