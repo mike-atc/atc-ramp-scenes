@@ -334,7 +334,8 @@ function groupScore(value: string, sceneText: string): number {
     .replace(/\(.*?\)/g, "")
     .split(/[^a-z]+/)
     .filter((t) => t.length >= 4 && !["with", "staff", "crew"].includes(t));
-  return tokens.filter((t) => sceneText.includes(t.replace(/s$/, ""))).length;
+  const phrase = value.toLowerCase().replace(/\(.*?\)/g, "").trim();
+  return tokens.filter((t) => sceneText.includes(t.replace(/s$/, ""))).length + (sceneText.includes(phrase) ? 3 : 0);
 }
 
 async function pickCast(db: SceneDb, scene: SceneRow, input: BuildInput, weather: string, recent: Set<string>, rnd: () => number) {
@@ -375,11 +376,15 @@ async function pickCast(db: SceneDb, scene: SceneRow, input: BuildInput, weather
   const contexts = sceneContexts(scene);
   const cast: Record<string, string> = {};
   const ids: number[] = [];
+  let kidsGroup = false;
+  let staffGroup = false;
   for (const category of categories) {
+    if (category === "Clothing style" && staffGroup) continue; // the role defines the uniform
     const options = rows.filter(
       (r) =>
         r.category === category &&
-        optionAllowed(r, { severity: input.severity, mood: input.mood, contexts, weather, recent, id: r.id }),
+        optionAllowed(r, { severity: input.severity, mood: input.mood, contexts, weather, recent, id: r.id }) &&
+        !(category === "Age band" && /baby|toddler|child|teen/i.test(r.value) && !kidsGroup),
     );
     // Facial hair only sometimes; hands-only and high severity never need faces.
     if (category === "Facial hair" && rnd() < 0.7) continue;
@@ -393,11 +398,42 @@ async function pickCast(db: SceneDb, scene: SceneRow, input: BuildInput, weather
     }
     const pick = weightedPick(pool, rnd);
     if (pick) {
+      if (category.startsWith("Group type")) {
+        kidsGroup = optionTags(pick.tags).includes("kids");
+        staffGroup = optionTags(pick.tags).includes("staff");
+      }
       cast[category] = pick.value;
       ids.push(pick.id);
     }
   }
-  return { cast, ids, note: handsOnly ? "hands only: do not show faces" : input.severity === "high" ? "faces turned away or distant" : "" };
+  const note = handsOnly
+    ? "hands only: do not show faces"
+    : `${input.severity === "high" ? "faces turned away or distant. " : ""}Cast describes the main person; other people stay generic and varied.`;
+  return { cast, ids, note };
+}
+
+const SAFE_CONDITIONS = new Set(["Pristine and spotless", "Everyday wear", "Cluttered with carts and bags"]);
+const BAD_VEHICLES = new Set(["Fire truck", "Ambulance", "Snow plough", "Seaplane", "Longtail or speedboat"]);
+/** Only modifiers that cannot imply facts the story did not state. */
+function MODIFIER_OK(r: OptionRow, scene: SceneRow, severity: Severity): boolean {
+  const t = sceneTags(scene.tags);
+  switch (r.category) {
+    case "Ads and screens":
+    case "Age and finish":
+    case "Materials and palette":
+    case "Natural light":
+      return severity !== "high" || r.category !== "Age and finish" || !/renovation|makeshift/i.test(r.value);
+    case "Signage script":
+      return r.value === "No readable signs";
+    case "Condition":
+      return severity !== "high" && SAFE_CONDITIONS.has(r.value);
+    case "Vehicles and equipment":
+      return (t.includes("apron") || t.includes("out")) && !BAD_VEHICLES.has(r.value) && r.value !== "None";
+    case "Background aircraft activity":
+      return (t.includes("apron") || t.includes("acft")) && r.value !== "None visible";
+    default:
+      return false;
+  }
 }
 
 async function pickModifiers(db: SceneDb, input: BuildInput, scene: SceneRow, weather: string, recent: Set<string>, rnd: () => number) {
@@ -406,7 +442,7 @@ async function pickModifiers(db: SceneDb, input: BuildInput, scene: SceneRow, we
   const byCategory = new Map<string, OptionRow[]>();
   for (const r of rows) {
     // Seasonal decor needs the post date and region; not wired in v1, so the category is skipped.
-    if (r.category === "Seasonal decor") continue;
+    if (!MODIFIER_OK(r, scene, input.severity)) continue;
     const tags = optionTags(r.tags);
     if (input.severity === "high" && !tags.includes("h")) continue;
     if (tags.includes("p") && (!POSITIVE_MOODS.has(input.mood.toLowerCase()) || input.severity === "high")) continue;
