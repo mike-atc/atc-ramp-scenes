@@ -6,6 +6,7 @@ export interface PromptEnv {
   OPENROUTER_API_KEY?: string;
   LABEL_MODEL?: string;
   WRITE_MODEL?: string;
+  PICK_MODEL?: string;
 }
 
 export interface StoryInput {
@@ -99,11 +100,11 @@ async function pickScene(
   scenes: { id: number; name: string; description: string; people: string; must_not_imply: string }[],
 ) {
   const system = `You choose the photo scene for a news post. Return one JSON object: {"scene_id": <id or null>, "reason": "<one short sentence>"}.
-Pick the scene that best fits the story. REJECT any scene whose picture would imply facts the story does not state (a cause, blame, casualties, injuries, damage, a delay, a closure, crowd size, who is helping whom, number of items). Use each scene's must_not_imply as a guide. Check who the story says is affected (a passenger, a crew member, the captain, a child) and reject scenes that show a different person in that role. If none is safe, return null.`;
+Pick the scene that best fits the story. REJECT any scene whose picture would imply facts the story does not state (a cause, blame, casualties, injuries, damage, a delay, a closure, crowd size, who is helping whom, number of items). Use each scene's must_not_imply as a guide. Read the story carefully and check exactly who is affected (a passenger, a crew member, the captain, a child) and reject scenes that show a different person in that role. If none is safe, return null.`;
   const user = `${storyText(story)}\n\nCANDIDATE SCENES:\n${scenes
     .map((s) => `#${s.id} ${s.name}\n  ${s.description}\n  people: ${s.people}\n  must not imply: ${s.must_not_imply}`)
     .join("\n")}`;
-  const out = await llm(env, env.LABEL_MODEL ?? "anthropic/claude-haiku-5.5", system, user, 300);
+  const out = await llm(env, env.PICK_MODEL ?? "anthropic/claude-sonnet-5.5", system, user, 300);
   const id = Number(out.scene_id);
   return { id: scenes.some((s) => s.id === id) ? id : null, reason: String(out.reason ?? "") };
 }
