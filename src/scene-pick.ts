@@ -481,6 +481,14 @@ async function pickModifiers(db: SceneDb, input: BuildInput, scene: SceneRow, we
   return picked;
 }
 
+const TROPICAL_REGIONS = ["sea", "sasia", "pacific", "caribbean", "africa", "mideast"];
+function placeFitsRegion(row: Record<string, string | number>, region: string | undefined): boolean {
+  if (!region) return true;
+  const text = `${row.spot ?? ""} ${row.description ?? ""}`.toLowerCase();
+  if (/palm|tropical|banana|coconut/.test(text) && !TROPICAL_REGIONS.includes(region.toLowerCase())) return false;
+  return true;
+}
+
 function regionMatches(rowRegion: string, region: string | undefined): boolean {
   const regions = parseList(rowRegion, /;/).map((r) => r.toLowerCase());
   if (!region) return true;
@@ -513,7 +521,7 @@ export async function buildParts(db: SceneDb, input: BuildInput, rnd: () => numb
   const compatible = (s: Record<string, string>) => {
     const id = Number(s.id);
     if ((id === 12 || id === 4) && !aerialShot) return false; // satellite and drone need an aerial or exterior scene
-    if (id === 12 && scene.subject === "People action") return false;
+    if (id === 12 && (scene.subject === "People action" || input.severity !== "high")) return false; // satellite only for high-severity wide events
     if (id === 7 && !sceneTagList.includes("cctv")) return false;
     if ((id === 9) && !sceneTagList.includes("dash") && !sceneTagList.includes("road")) return false;
     return true;
@@ -567,8 +575,12 @@ export async function buildParts(db: SceneDb, input: BuildInput, rnd: () => numb
         .bind(scene.place_type)
         .all<Record<string, string | number>>()
     ).results ?? [];
-  const regionRows = placeRows.filter((r) => regionMatches(String(r.region ?? "Any"), input.region));
-  const placePool = (regionRows.length ? regionRows : placeRows) as (Record<string, string | number> & { weight?: number })[];
+  const regionRows = placeRows.filter(
+    (r) => regionMatches(String(r.region ?? "Any"), input.region) && placeFitsRegion(r, input.region),
+  );
+  // No fallback to places tied to other regions: use region-neutral places, then the full list only as a last resort.
+  const neutralRows = placeRows.filter((r) => String(r.region ?? "Any").toLowerCase().split(";").includes("any") && placeFitsRegion(r, input.region));
+  const placePool = (regionRows.length ? regionRows : neutralRows.length ? neutralRows : placeRows) as (Record<string, string | number> & { weight?: number })[];
   let place = weightedPick(placePool, rnd) ?? null;
   let placeNote = "";
   if (input.place_name && place) {
