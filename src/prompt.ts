@@ -24,6 +24,7 @@ const SEVS: Severity[] = ["low", "medium", "high"];
 
 async function llm(env: PromptEnv, model: string, system: string, user: string, maxTokens = 900): Promise<Record<string, unknown>> {
   if (!env.OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY is not set.");
+  let lastRaw = "";
   for (let attempt = 0; attempt < 2; attempt++) {
     const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -32,6 +33,7 @@ async function llm(env: PromptEnv, model: string, system: string, user: string, 
         model,
         max_tokens: maxTokens,
         temperature: 0.4,
+        reasoning: { effort: "none" },
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: system },
@@ -45,6 +47,7 @@ async function llm(env: PromptEnv, model: string, system: string, user: string, 
     }
     const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
     const raw = data.choices?.[0]?.message?.content ?? "";
+    lastRaw = raw || JSON.stringify(data).slice(0, 300);
     const m = raw.match(/\{[\s\S]*\}/);
     if (m) {
       try {
@@ -54,7 +57,7 @@ async function llm(env: PromptEnv, model: string, system: string, user: string, 
       }
     }
   }
-  throw new Error("Model did not return valid JSON.");
+  throw new Error(`Model did not return valid JSON: ${lastRaw.slice(0, 300)}`);
 }
 
 const storyText = (s: StoryInput) =>
