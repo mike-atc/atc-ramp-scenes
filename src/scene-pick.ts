@@ -548,7 +548,9 @@ export async function buildParts(db: SceneDb, input: BuildInput, rnd: () => numb
   const shots = [scene.shot_type, scene.shot_type_alt ?? ""].filter(Boolean);
   const pick = (value: string | null | undefined, generic: string[] = []) => pickOne(listFromSetup(value, generic), rnd) ?? "";
   const timeOfDay = input.time_of_day?.trim() || pick(setup.time_of_day, GENERIC_TIMES);
-  const weather = input.weather?.trim() || pick(setup.weather, GENERIC_WEATHER);
+  // Weather the story does not state stays calm and plain: no snow, storm, rain or haze invented by chance.
+  const NEUTRAL_WEATHER = ["Clear", "Partly cloudy", "Overcast"];
+  const weather = input.weather?.trim() || pickOne(NEUTRAL_WEATHER, rnd) || "Overcast";
   const camera = {
     device: setup.device,
     lens: pick(setup.lens),
