@@ -436,9 +436,11 @@ function MODIFIER_OK(r: OptionRow, scene: SceneRow, severity: Severity): boolean
     case "Ads and screens":
       return !/paper notices|large video wall|generic unbranded ads|tourism posters/i.test(r.value);
     case "Age and finish":
+      return /^(Brand new|Modern)/i.test(r.value);
     case "Materials and palette":
+      return !/1990s|cinder|brick|plastic/i.test(r.value);
     case "Natural light":
-      return r.category !== "Age and finish" || /^(Brand new|Modern)/i.test(r.value);
+      return true;
     case "Signage script":
       return r.value === "No readable signs";
     case "Condition":
@@ -552,7 +554,7 @@ export async function buildParts(db: SceneDb, input: BuildInput, rnd: () => numb
     weather,
     light_type: pick(setup.light_type),
     light_direction: pick(setup.light_direction),
-    color_grade: pick(setup.color_grade),
+    color_grade: pick(setup.color_grade).replace(/.*(vibrant|saturat|punch|teal|cinematic|high contrast|glow).*/i, "Natural, muted"),
     image_quality: pick(setup.image_quality),
     lens_flaws: pick(setup.lens_flaws),
   };
