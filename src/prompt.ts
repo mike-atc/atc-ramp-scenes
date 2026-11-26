@@ -187,10 +187,19 @@ export async function runPrompt(env: PromptEnv, story: StoryInput) {
   let pick = await pickScene(env, story, cand.scenes);
   let fallback = "";
   if (pick.id == null) {
-    // retry with the general label scenes, then take a random safe candidate
-    fallback = "AI rejected all candidates; used a random candidate.";
-    const rnd = cand.scenes[Math.floor(Math.random() * cand.scenes.length)];
-    pick = { id: rnd.id, reason: fallback };
+    // The AI rejected every candidate: use neutral general-label scenes, never a random topic scene.
+    const general = await candidateScenes(db, { topic_id: 125, severity: "low", limit: 12 });
+    if (general.count > 0) {
+      const second = await pickScene(env, story, general.scenes);
+      const chosen = second.id != null ? second : { id: general.scenes[0].id, reason: "AI rejected all candidates; used a neutral general scene." };
+      pick = chosen;
+      usedTopic = 125;
+      sceneSeverity = "low";
+      fallback = "AI rejected topic candidates; used a neutral general scene.";
+    } else {
+      const rnd = cand.scenes[Math.floor(Math.random() * cand.scenes.length)];
+      pick = { id: rnd.id, reason: "AI rejected all candidates; used a random candidate." };
+    }
   }
 
   // D. parts
