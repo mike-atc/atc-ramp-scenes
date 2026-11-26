@@ -25,7 +25,7 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/health") return j({ ok: true });
-    if (!["/pick", "/prompt"].includes(url.pathname) || request.method !== "POST") return bad("Not found.", 404);
+    if (!["/pick", "/prompt", "/post-update"].includes(url.pathname) || request.method !== "POST") return bad("Not found.", 404);
     if (!env.RAMP_SCENES_KEY || request.headers.get("authorization") !== `Bearer ${env.RAMP_SCENES_KEY}`) {
       return bad("Unauthorized.", 401);
     }
@@ -34,6 +34,19 @@ export default {
       body = (await request.json()) as Record<string, unknown>;
     } catch {
       return bad("Body must be JSON.");
+    }
+    if (url.pathname === "/post-update") {
+      const id = Number(body.post_id);
+      if (!Number.isInteger(id) || id < 1) return bad("post_id is required.");
+      const imageUrl = str(body.image_url, 1000);
+      const fbUrl = str(body.facebook_url, 1000);
+      const status = str(body.status, 20);
+      await env.SCENES.prepare(
+        "UPDATE posts SET image_url = COALESCE(NULLIF(?, ''), image_url), facebook_url = COALESCE(NULLIF(?, ''), facebook_url), status = COALESCE(NULLIF(?, ''), status) WHERE id = ?",
+      )
+        .bind(imageUrl, fbUrl, status, id)
+        .run();
+      return j({ ok: true, post_id: id });
     }
     if (url.pathname === "/prompt") {
       const title = str(body.title, 400);
