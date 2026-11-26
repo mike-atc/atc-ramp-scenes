@@ -328,14 +328,29 @@ export function optionAllowed(
 }
 
 /** Score a staff/group option against the scene text; best match wins. */
+const GROUP_HINTS: Record<string, string[]> = {
+  Firefighter: ["fire crew", "fire truck", "firefight", "hosing", "fire engine"],
+  "Aircraft mechanic": ["engineer", "mechanic", "maintenance"],
+  "Ramp or ground crew": ["ground crew", "ramp crew", "ramp worker", "handler"],
+  Pilots: ["pilot", "cockpit", "captain"],
+  "Cabin crew": ["cabin crew", "flight attendant", "purser"],
+  "Flight attendant serving passengers": ["flight attendant", "serving", "trolley"],
+  "Airport police": ["police", "officer"],
+  Paramedic: ["paramedic", "medic", "stretcher"],
+  "Baggage handler": ["baggage handler", "loading bags", "baggage cart"],
+  "Security screener": ["screener", "x-ray", "security check"],
+  "Border or immigration officer": ["immigration", "passport control", "border"],
+};
+
 function groupScore(value: string, sceneText: string): number {
+  const hint = (GROUP_HINTS[value] ?? []).some((h) => sceneText.includes(h)) ? 4 : 0;
   const tokens = value
     .toLowerCase()
     .replace(/\(.*?\)/g, "")
     .split(/[^a-z]+/)
     .filter((t) => t.length >= 4 && !["with", "staff", "crew"].includes(t));
   const phrase = value.toLowerCase().replace(/\(.*?\)/g, "").trim();
-  return tokens.filter((t) => sceneText.includes(t.replace(/s$/, ""))).length + (sceneText.includes(phrase) ? 3 : 0);
+  return tokens.filter((t) => sceneText.includes(t.replace(/s$/, ""))).length + (sceneText.includes(phrase) ? 3 : 0) + hint;
 }
 
 async function pickCast(db: SceneDb, scene: SceneRow, input: BuildInput, weather: string, recent: Set<string>, rnd: () => number) {
@@ -361,7 +376,6 @@ async function pickCast(db: SceneDb, scene: SceneRow, input: BuildInput, weather
         "Clothing color",
         "Accessory",
         "Expression",
-        ...(crowd ? ["Crowd density", "Group size"] : []),
         "Face visibility",
       ];
 
@@ -384,6 +398,7 @@ async function pickCast(db: SceneDb, scene: SceneRow, input: BuildInput, weather
       (r) =>
         r.category === category &&
         optionAllowed(r, { severity: input.severity, mood: input.mood, contexts, weather, recent, id: r.id }) &&
+        !(!staffGroup && !category.startsWith("Group type") && optionTags(r.tags).includes("staff")) &&
         !(category === "Age band" && /baby|toddler|child|teen/i.test(r.value) && !kidsGroup),
     );
     // Facial hair only sometimes; hands-only and high severity never need faces.
